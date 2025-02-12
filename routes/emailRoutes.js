@@ -84,33 +84,54 @@ const fetchEmailsFromFolder = (imapConfig, folder) => {
   });
 };
 
-// User Registration
-router.post('/register', async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const { username, phoneNumber, email_id, app_password } = req.body;
+
+    if (!username || !phoneNumber || !email_id || !app_password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const existingUser = await User.findOne({ email_id });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    // 🔹 Hash the app_password before saving to the database
     const hashedPassword = await bcrypt.hash(app_password, 10);
-    const user = new User({ username, phoneNumber, email_id, app_password: hashedPassword });
-    await user.save();
-    res.status(201).json({ message: 'User registered successfully' });
+
+    const newUser = new User({ username, phoneNumber, email_id, app_password: hashedPassword });
+    await newUser.save();
+
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+//login
+router.post("/login", async (req, res) => {
+  try {
+    const { email_id, app_password } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ email_id });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid email_id or app_password" });
+    }
+
+    // Compare hashed password
+    const isMatch = await bcrypt.compare(app_password, user.app_password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid email_id or app_password" });
+    }
+
+    res.json({ message: "Login successful" });
   } catch (err) {
-    res.status(400).json({ error: 'Registration failed', details: err.message });
+    res.status(500).json({ error: "Authentication failed", details: err.message });
   }
 });
 
-// User Login
-router.post('/login', async (req, res) => {
-  try {
-    const { email_id, app_password } = req.body;
-    const user = await User.findOne({ email_id });
-    if (user && (await bcrypt.compare(app_password, user.app_password))) {
-      res.json({ message: 'Login successful' });
-    } else {
-      res.status(401).json({ error: 'Invalid email_id or app_password' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: 'Authentication failed', details: err.message });
-  }
-});
 
 // Fetch Emails from IMAP Folders
 const fetchEmails = async (req, res, folder) => {
